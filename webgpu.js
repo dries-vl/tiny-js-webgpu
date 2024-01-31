@@ -10,7 +10,8 @@ const game = await WebAssembly.instantiateStreaming(
 
 const vert_shader = await (await fetch("vert.wgsl")).text();
 const frag_shader = await (await fetch("frag.wgsl")).text();
-import { cubeIndices, cubeVertices } from './cube.js';
+import {cubeIndices, cubeIndicesLines, cubeVertices} from './cube.js';
+import { viewProjMatrix } from './matrices.js';
 
 // Take the memory of the wasm module and read it as an array of 32bit blocks
 // By default received pointers will convert to an index in this array (why?)
@@ -20,7 +21,7 @@ const memoryViewAsFloat32 = new Float32Array(game.instance.exports.memory.buffer
 
 // Global variables for reuse
 /** @type {HTMLCanvasElement} */
-const canvas = document.getElementById('game-canvas');
+export const canvas = document.getElementById('game-canvas');
 /** @type {GPUDevice}*/
 let device;
 /** @type {GPURenderPipeline}*/
@@ -68,7 +69,7 @@ function createRenderPipeline(device, format) {
         buffers: [
             // Vertex input layout
             {
-                arrayStride: 5 * 4, // Size for position + tex_coords
+                arrayStride: 5 * 4, // 3 x 4byte for vertex, 2 x 4byte for uv, 1x4byte for vertex_id
                 attributes: [
                     { shaderLocation: 0, offset: 0, format: "float32x3" }, // position
                     { shaderLocation: 1, offset: 3 * 4, format: "float32x2" }, // tex_coords
@@ -88,7 +89,7 @@ function createRenderPipeline(device, format) {
         layout: device.createPipelineLayout(bindgroupLayouts),
         vertex: vertexState,
         fragment: fragmentState,
-        primitive: {topology: 'triangle-list'},
+        primitive: {topology: 'line-list', cullMode: 'back', frontFace: 'cw'}
     });
 
 }
@@ -106,9 +107,7 @@ function createCameraUniformAndBuffer(device) {
         size: cameraMatrix.byteLength,
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
-
-    device.queue.writeBuffer(cameraBuffer, 0, cameraMatrix);
-    // camera bindgroup
+    device.queue.writeBuffer(cameraBuffer, 0, viewProjMatrix);
 
     const cameraBindGroupLayout = device.createBindGroupLayout({
         entries: [
@@ -126,30 +125,30 @@ function createCameraUniformAndBuffer(device) {
 
     cameraBindGroup = device.createBindGroup({
         layout: cameraBindGroupLayout,
-        entries: [{ binding: 0, resource: { buffer: cameraBuffer } }],
+        entries: [
+            { binding: 0, resource: { buffer: cameraBuffer } }
+        ],
     });
     return cameraBindGroupLayout;
 
 }
 
-async function renderColor(color) {
+async function render() {
     const vertexBuffer = device.createBuffer({
         size: cubeVertices.byteLength,
         usage: GPUBufferUsage.VERTEX,
         mappedAtCreation: true,
     });
     new Float32Array(vertexBuffer.getMappedRange()).set(cubeVertices);
-
     vertexBuffer.unmap();
-    const instanceBuffer = device.createBuffer({
-        size: cubeIndices.byteLength,
+
+    const indexBuffer = device.createBuffer({
+        size: cubeIndicesLines.byteLength,
         usage: GPUBufferUsage.INDEX,
         mappedAtCreation: true,
     });
-    new Uint16Array(instanceBuffer.getMappedRange()).set(cubeIndices);
-
-    instanceBuffer.unmap();
-    // actual drawing command
+    new Uint16Array(indexBuffer.getMappedRange()).set(cubeIndicesLines);
+    indexBuffer.unmap();
 
     const commandEncoder = device.createCommandEncoder();
     const textureView = context.getCurrentTexture().createView();
@@ -165,12 +164,11 @@ async function renderColor(color) {
     const renderPass = commandEncoder.beginRenderPass(renderPassDescriptor);
     renderPass.setPipeline(pipeline);
     renderPass.setVertexBuffer(0, vertexBuffer);
-    renderPass.setIndexBuffer(instanceBuffer, 'uint16');
+    renderPass.setIndexBuffer(indexBuffer, 'uint16');
     renderPass.setBindGroup(0, cameraBindGroup);
     renderPass.drawIndexed(cubeIndices.length); // Assuming cubeIndices holds index data
     renderPass.end();
     device.queue.submit([commandEncoder.finish()]);
-
 }
 
 async function start() {
@@ -184,8 +182,8 @@ function myJavaScriptFunction(address) {
     let field2 = memoryViewAsFloat32.at((address / 4) + 1);
     console.log("Called from WASM with field 1:", field1);
     console.log("Called from WASM with field 2:", field2);
-
 }
-start();
+
 await initWebGPU(canvas);
-renderColor({r: 1.0, g: 0.0, b: 0.0}); // Render red color
+render();
+start();

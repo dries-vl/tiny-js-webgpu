@@ -1,21 +1,28 @@
-const PHI = (1 + 2.23606797749979) / 2 // 2.236 is sqrt(5)
+const PHI = (1 + 2.23606) / 2 // 2.236 is sqrt(5)
 
 export const cubeVertices = new Float32Array([
-    // Front face
-    -1, PHI, 0, // v0
-    -1, PHI, 0,
-    1, PHI, 0,
-    -1, -PHI, 0,
-    1, -PHI, 0,
-    0, -1, PHI,
-    0, 1, PHI,
-    0, -1, -PHI,
-    0, 1, -PHI,
-    PHI, 0, -1,
-    PHI, 0, 1,
-    -PHI, 0, -1,
-    -PHI, 0, 1
+    // Vertex positions (x, y, z) followed by UV coordinates (u, v)
+    // Calculate u, v based on spherical coordinates
+    ...calculateUV(-1, PHI, 0),
+    ...calculateUV(1, PHI, 0),
+    ...calculateUV(-1, -PHI, 0),
+    ...calculateUV(1, -PHI, 0),
+    ...calculateUV(0, -1, PHI),
+    ...calculateUV(0, 1, PHI),
+    ...calculateUV(0, -1, -PHI),
+    ...calculateUV(0, 1, -PHI),
+    ...calculateUV(PHI, 0, -1),
+    ...calculateUV(PHI, 0, 1),
+    ...calculateUV(-PHI, 0, -1),
+    ...calculateUV(-PHI, 0, 1)
 ]);
+
+function calculateUV(x, y, z) {
+    const length = Math.sqrt(x * x + y * y + z * z);
+    const u = 0.5 + (Math.atan2(z, x) / (2 * Math.PI));
+    const v = 0.5 - (Math.asin(y / length) / Math.PI);
+    return [x, y, z, u, v];
+}
 
 export const cubeIndices = new Uint16Array([
         11, 5, 0,
@@ -40,3 +47,23 @@ export const cubeIndices = new Uint16Array([
         1, 9, 8
     ])
 ;
+export const cubeIndicesLines = convertTrianglesToLines(cubeIndices);
+
+function convertTrianglesToLines(triangleIndices) {
+    const lineIndices = new Set();  // Using a Set to avoid duplicates
+
+    for (let i = 0; i < triangleIndices.length; i += 3) {
+        const a = triangleIndices[i];
+        const b = triangleIndices[i + 1];
+        const c = triangleIndices[i + 2];
+
+        // Add each edge to the set
+        lineIndices.add(Math.min(a, b) + "_" + Math.max(a, b));
+        lineIndices.add(Math.min(b, c) + "_" + Math.max(b, c));
+        lineIndices.add(Math.min(c, a) + "_" + Math.max(c, a));
+    }
+
+    // Convert set back to array
+    const lineArray = Array.from(lineIndices).map(item => item.split("_").map(Number));
+    return new Uint16Array(lineArray.flat());
+}
