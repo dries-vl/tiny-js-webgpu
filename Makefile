@@ -1,5 +1,6 @@
 game.wasm: src/lib.rs
 	rustc +nightly \
+	--extern glam=path/to/glam.rlib \
 	-C opt-level=s \
 	-C strip=symbols \
 	-C panic=abort \

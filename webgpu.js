@@ -1,6 +1,6 @@
 // Fetch the wasm module and add JS functions to it that it can call
 const game = await WebAssembly.instantiateStreaming(
-    fetch("lib.wasm"),
+    fetch("tiny_js_webgpu.wasm"),
     {
         "env": {
             "myJavaScriptFunction": myJavaScriptFunction
@@ -11,13 +11,16 @@ const game = await WebAssembly.instantiateStreaming(
 const vert_shader = await (await fetch("vert.wgsl")).text();
 const frag_shader = await (await fetch("frag.wgsl")).text();
 import {cubeIndices, cubeIndicesLines, cubeVertices} from './cube.js';
-import { viewProjMatrix } from './matrices.js';
 
 // Take the memory of the wasm module and read it as an array of 32bit blocks
 // By default received pointers will convert to an index in this array (why?)
 // 8bit array: index still works for pointer, but each next index is 8bit block
 const memoryViewAsInt32 = new Uint32Array(game.instance.exports.memory.buffer);
 const memoryViewAsFloat32 = new Float32Array(game.instance.exports.memory.buffer);
+
+// It works, yay!
+const matrixPtr = game.instance.exports.get_view_proj_array();
+const viewProjMatrix = memoryViewAsFloat32.slice(matrixPtr / 4, matrixPtr/4 + 16);
 
 // Global variables for reuse
 /** @type {HTMLCanvasElement} */

@@ -1,5 +1,5 @@
 [package]
-name = "rust-browser-game"
+name = "tiny-js-webgpu"
 version = "0.1.0"
 edition = "2021"
 
@@ -13,6 +13,7 @@ target = "wasm32-unknown-unknown"
 crate-type = ["cdylib"]
 
 [dependencies]
+glam = { version = "0.25.0"}
 
 [profile.release]
 panic = "abort"     # abort immediately rather than unwind, removes need for extra unwinding code; smaller binary
