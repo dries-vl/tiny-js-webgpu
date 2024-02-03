@@ -22,17 +22,17 @@ const memoryViewAsFloat32 = new Float32Array(game.instance.exports.memory.buffer
 const matrixPtr = game.instance.exports.get_view_proj_array();
 const viewProjMatrix = memoryViewAsFloat32.slice(matrixPtr / 4, matrixPtr/4 + 16);
 
-// Global variables for reuse
+// Global JS objects for reuse
 /** @type {HTMLCanvasElement} */
 export const canvas = document.getElementById('game-canvas');
 /** @type {GPUDevice}*/
 let device;
-/** @type {GPURenderPipeline}*/
-let pipeline;
 /** @type {GPUCanvasContext}*/
 let context;
 /** @type {GPUTextureFormat}*/
 let format;
+/** @type {GPURenderPipeline}*/
+let pipeline;
 
 let cameraBuffer, cameraBindGroup;
 /** @param canvas {HTMLCanvasElement} */
@@ -60,7 +60,7 @@ async function initWebGPU(canvas) {
 /** @param device {GPUDevice}
  *  @param format {GPUTextureFormat}*/
 function createRenderPipeline(device, format) {
-    const cameraBindGroupLayout = createCameraUniformAndBuffer(device);
+    const cameraBindGroupLayout = createCameraBindgroup(device);
     /** @type {GPUPipelineLayoutDescriptor}*/
     let bindgroupLayouts = {bindGroupLayouts: [cameraBindGroupLayout]};
     /** @type {GPUVertexState} */
@@ -97,7 +97,7 @@ function createRenderPipeline(device, format) {
 
 }
 
-function createCameraUniformAndBuffer(device) {
+function createCameraBindgroup(device) {
     // identity matrix to set it at baseline to avoid the maths for now
 
     const cameraMatrix = new Float32Array([
@@ -136,8 +136,9 @@ function createCameraUniformAndBuffer(device) {
 
 }
 
-async function render() {
-    const vertexBuffer = device.createBuffer({
+/** @return GPUBuffer*/
+function createVertexBuffer() {
+    let vertexBuffer = device.createBuffer({
         size: cubeVertices.byteLength,
         usage: GPUBufferUsage.VERTEX,
         mappedAtCreation: true,
@@ -145,7 +146,12 @@ async function render() {
     new Float32Array(vertexBuffer.getMappedRange()).set(cubeVertices);
     vertexBuffer.unmap();
 
-    const indexBuffer = device.createBuffer({
+    return vertexBuffer;
+}
+
+/** @return GPUBuffer*/
+function createIndexBuffer() {
+    let indexBuffer = device.createBuffer({
         size: cubeIndicesLines.byteLength,
         usage: GPUBufferUsage.INDEX,
         mappedAtCreation: true,
@@ -153,14 +159,18 @@ async function render() {
     new Uint16Array(indexBuffer.getMappedRange()).set(cubeIndicesLines);
     indexBuffer.unmap();
 
-    const commandEncoder = device.createCommandEncoder();
-    const textureView = context.getCurrentTexture().createView();
+    return indexBuffer;
+}
 
+async function frame(vertexBuffer, indexBuffer) {
+    const commandEncoder = device.createCommandEncoder();
+    // getCurrentTexture is a different texture each frame, to avoid being blocked by the gpu
+    const textureView = context.getCurrentTexture().createView();
     const renderPassDescriptor = {
         colorAttachments: [{
             view: textureView,
             loadOp: 'clear',
-            clearColor: { r: 0, g: 0, b: 0, a: 1.0 },
+            clearColor: {r: 0, g: 0, b: 0, a: 1.0},
             storeOp: 'store',
         }],
     };
@@ -169,9 +179,10 @@ async function render() {
     renderPass.setVertexBuffer(0, vertexBuffer);
     renderPass.setIndexBuffer(indexBuffer, 'uint16');
     renderPass.setBindGroup(0, cameraBindGroup);
-    renderPass.drawIndexed(cubeIndices.length); // Assuming cubeIndices holds index data
+    renderPass.drawIndexed(cubeIndices.length);
     renderPass.end();
     device.queue.submit([commandEncoder.finish()]);
+    await device.queue.onSubmittedWorkDone();
 }
 
 async function start() {
@@ -187,6 +198,13 @@ function myJavaScriptFunction(address) {
     console.log("Called from WASM with field 2:", field2);
 }
 
-await initWebGPU(canvas);
-render();
 start();
+await initWebGPU(canvas);
+let vertexBuffer = createVertexBuffer();
+let indexBuffer = createIndexBuffer();
+// while (true) {
+    let startTime = performance.now();
+    await frame(vertexBuffer, indexBuffer);
+    let endTime = performance.now();
+    document.getElementById('fps-label').textContent =`FPS: ${1000.00 / (endTime - startTime)}`
+// }
